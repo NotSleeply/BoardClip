@@ -8,11 +8,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/NotSleeply/ClawBoard.git"
+    "url": "git+https://github.com/NotSleeply/BoardClip.git"
   },
-  "homepage": "https://github.com/NotSleeply/ClawBoard#readme",
+  "homepage": "https://github.com/NotSleeply/BoardClip#readme",
   "bugs": {
-    "url": "https://github.com/NotSleeply/ClawBoard/issues"
+    "url": "https://github.com/NotSleeply/BoardClip/issues"
   },
   "engines": {
     "node": ">=18.0.0"
