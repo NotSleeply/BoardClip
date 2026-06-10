@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>AI 驱动的本地剪贴板管理器 CLI</strong><br>
-  <em>智能记录 · 语义搜索 · 永久收藏</em>
+  <em>智能记录 · 语义搜索 · 永久收藏 · 多平台适配</em>
 </p>
 
 <p align="center">
