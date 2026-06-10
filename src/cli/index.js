@@ -107,32 +107,23 @@ function printRecordDetails(record) {
 }
 
 function copyToClipboard(text) {
-  const { spawnSync } = require('child_process');
-  let result;
+  const { createClipboardProvider } = require('../core/clipboard/providers');
+  const clipboard = createClipboardProvider();
+  clipboard.writeText(text || '');
+}
 
-  if (process.platform === 'win32') {
-    result = spawnSync('powershell', ['-NoProfile', '-Command', '$Input | Set-Clipboard'], {
-      input: Buffer.from(text, 'utf8'),
-      windowsHide: true
-    });
-  } else if (process.platform === 'darwin') {
-    result = spawnSync('pbcopy', [], {
-      input: text,
-      encoding: 'utf8'
-    });
-  } else {
-    result = spawnSync('xclip', ['-selection', 'clipboard'], {
-      input: text,
-      encoding: 'utf8'
-    });
+function getWatcherStatus() {
+  const pidFile = path.join(getDataDir(), 'watcher.pid');
+  if (!fs.existsSync(pidFile)) {
+    return { running: false, message: '未运行' };
   }
 
-  if (result.error) {
-    throw result.error;
-  }
-
-  if (result.status !== 0) {
-    throw new Error(result.stderr || 'Failed to copy text to clipboard.');
+  const pid = parseInt(fs.readFileSync(pidFile, 'utf8'), 10);
+  try {
+    process.kill(pid, 0);
+    return { running: true, pid, message: `运行中 PID=${pid}` };
+  } catch {
+    return { running: false, pid, stale: true, message: 'PID 文件存在，但进程不存在' };
   }
 }
 
@@ -148,7 +139,7 @@ program
   .alias('ls')
   .description('列出剪贴板历史记录')
   .option('-n, --limit <number>', '显示条数', '20')
-  .option('-t, --type <type>', '按类型过滤 (text/code/file/image)')
+  .option('-t, --type <type>', '按类型过滤 (text/code/file/image/html)')
   .option('-f, --favorite', '仅显示收藏')
   .option('-g, --group <id>', '按分组过滤')
   .option('--tag <tag>', '按标签过滤')
@@ -349,7 +340,7 @@ program
         console.log(`  💻 代码记录:  ${stats.code || 0}`);
         console.log(`  📁 文件记录:  ${stats.file || 0}`);
         console.log(`  🖼️ 图片记录:  ${stats.image || 0}`);
-        console.log(`  ⭐ 收藏数量:  ${stats.favorites || 0}`);
+        console.log(`  ⭐ 收藏数量:  ${stats.favorites || stats.favorite || 0}`);
         console.log(`  🔒 加密数量:  ${stats.encrypted || 0}`);
         console.log(`  🏷️ 标签数量:  ${stats.tags || 0}`);
         if (stats.dailyStats) {
@@ -361,7 +352,7 @@ program
         }
       } else {
         console.log(`  📋 总记录: ${chalk.bold(stats.total || stats.totalRecords || 0)}`);
-        console.log(`  ⭐ 收藏:   ${stats.favorites || 0}`);
+        console.log(`  ⭐ 收藏:   ${stats.favorites || stats.favorite || 0}`);
         console.log(`  🔒 加密:   ${stats.encrypted || 0}`);
       }
       console.log();
@@ -620,6 +611,37 @@ program
     } finally {
       closeDb(db);
     }
+  });
+
+program
+  .command('doctor')
+  .description('检查 BoardClip 运行环境')
+  .action(() => {
+    const { createClipboardProvider } = require('../core/clipboard/providers');
+    const { getPlatformInfo } = require('../core/platform/platform');
+
+    console.log(chalk.bold('\nBoardClip Doctor\n'));
+
+    const info = getPlatformInfo();
+    console.log(`平台: ${info.platform}`);
+    console.log(`架构: ${info.arch}`);
+    console.log(`Node: ${info.node}`);
+    if (info.linuxSession) console.log(`Linux Session: ${info.linuxSession}`);
+    if (info.desktop) console.log(`Desktop: ${info.desktop}`);
+    console.log(`数据目录: ${getDataDir()}`);
+
+    console.log('\n剪贴板后端:');
+    try {
+      const clipboard = createClipboardProvider();
+      const check = clipboard.check();
+      console.log(JSON.stringify(check, null, 2));
+    } catch (err) {
+      console.log(JSON.stringify({ ok: false, error: err.message }, null, 2));
+    }
+
+    console.log('\nWatcher:');
+    console.log(getWatcherStatus().message);
+    console.log();
   });
 
 program

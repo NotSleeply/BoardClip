@@ -155,6 +155,23 @@ describe('Database', () => {
     expect(results[0].content).toBe('Hello World');
   });
 
+  test('Database searchRecords 应该支持 type 过滤', async () => {
+    db = new Database(createTmpDir('search-type'));
+    await db._initPromise;
+
+    addTestRecord(db, { type: 'text', content: 'shared token', summary: 'shared token' });
+    addTestRecord(db, {
+      type: 'code',
+      content: 'const shared = "token";',
+      summary: 'shared token',
+      language: 'javascript'
+    });
+
+    const results = db.searchRecords({ search: 'shared', type: 'code', limit: 10 });
+    expect(results.length).toBe(1);
+    expect(results[0].type).toBe('code');
+  });
+
   test('Database toggleFavorite 应该切换收藏状态', async () => {
     db = new Database(createTmpDir('fav'));
     await db._initPromise;

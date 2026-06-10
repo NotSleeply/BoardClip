@@ -1,8 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { fileURLToPath } = require('url');
-const ClipboardItem = require('../core/clipboard/ClipboardItem');
+const { createClipboardProvider } = require('../core/clipboard/providers');
 
 const logDir = path.join(os.homedir(), '.board-clip', 'logs');
 if (!fs.existsSync(logDir)) {
@@ -38,94 +37,11 @@ async function main() {
   const db = new Database(dataDir);
   await db._init();
 
-  function readText() {
-    const { execSync } = require('child_process');
-    try {
-      if (process.platform === 'win32') {
-        return execSync(
-          'powershell -NoProfile -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Clipboard"',
-          {
-            encoding: 'utf8',
-            windowsHide: true,
-            timeout: 5000
-          }
-        ).replace(/\r?\n$/, '');
-      } else if (process.platform === 'darwin') {
-        return execSync('pbpaste', { encoding: 'utf8', timeout: 5000 }).replace(/\r?\n$/, '');
-      } else {
-        return execSync('xclip -selection clipboard -o', {
-          encoding: 'utf8',
-          timeout: 5000
-        }).replace(/\r?\n$/, '');
-      }
-    } catch {
-      return '';
-    }
+  const clipboard = createClipboardProvider();
+  const check = clipboard.check();
+  if (!check.ok) {
+    log.error('[Watcher] 剪贴板后端不可用:', JSON.stringify(check));
   }
-
-  function parseUriList(uriList) {
-    return uriList
-      .split(/\r?\n/)
-      .map(line => line.trim())
-      .filter(line => line && !line.startsWith('#'))
-      .map(line => {
-        if (!line.startsWith('file://')) return null;
-        try {
-          return fileURLToPath(line);
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean);
-  }
-
-  function readFiles() {
-    const { execSync } = require('child_process');
-    try {
-      if (process.platform === 'win32') {
-        const output = execSync(
-          'powershell -NoProfile -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Clipboard -Format FileDropList | ForEach-Object { $_.FullName }"',
-          { encoding: 'utf8', windowsHide: true, timeout: 5000 }
-        );
-        return output
-          .split(/\r?\n/)
-          .map(line => line.trim())
-          .filter(Boolean);
-      }
-
-      if (process.platform === 'darwin') {
-        const output = execSync(
-          `osascript -e 'try' -e 'set theFile to the clipboard as «class furl»' -e 'return POSIX path of theFile' -e 'on error' -e 'return ""' -e 'end try'`,
-          { encoding: 'utf8', timeout: 5000 }
-        );
-        return output
-          .split(/\r?\n/)
-          .map(line => line.trim())
-          .filter(Boolean);
-      }
-
-      const output = execSync('xclip -selection clipboard -t text/uri-list -o', {
-        encoding: 'utf8',
-        timeout: 5000
-      });
-      return parseUriList(output);
-    } catch {
-      return [];
-    }
-  }
-
-  const clipboard = {
-    readText,
-    read: () => {
-      const files = readFiles();
-      if (files.length > 0) return ClipboardItem.fromFiles(files);
-
-      const text = readText();
-      if (!text) return null;
-      return ClipboardItem.fromText(text);
-    },
-    readImage: () => null
-  };
 
   const watcher = new ClipboardWatcher(db, clipboard, log, AI);
   watcher.start();

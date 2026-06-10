@@ -26,6 +26,7 @@ describe('BoardClip CLI', () => {
     expect(result.stdout).toContain('list');
     expect(result.stdout).toContain('search');
     expect(result.stdout).toContain('stats');
+    expect(result.stdout).toContain('doctor');
     expect(result.stdout).toContain('copy');
     expect(result.stdout).toContain('delete');
   });
@@ -102,6 +103,14 @@ describe('BoardClip CLI', () => {
   test('watch --status 应该正常执行', () => {
     const result = runCli('watch --status');
     expect(result.exitCode).toBe(0);
+  });
+
+  test('doctor 应该正常执行并输出环境信息', () => {
+    const result = runCli('doctor');
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('BoardClip Doctor');
+    expect(result.stdout).toContain('剪贴板后端');
+    expect(result.stdout).toContain('Watcher');
   });
 
   test('delete 不存在的记录应该报错', () => {

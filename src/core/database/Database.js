@@ -1240,27 +1240,27 @@ class Database {
   searchRecords(options = {}) {
     const limit = options.limit || 30;
     const search = options.search;
+    const type = options.type;
     try {
-      let result;
+      let sql = 'SELECT * FROM records WHERE 1=1';
+      const params = [];
+
       if (search) {
-        result = this.db.exec(
-          `SELECT id, type, content, created_at FROM records WHERE content LIKE ? ORDER BY created_at DESC LIMIT ?`,
-          [`%${search}%`, limit]
-        );
-      } else {
-        result = this.db.exec(
-          `SELECT id, type, content, created_at FROM records ORDER BY created_at DESC LIMIT ?`,
-          [limit]
-        );
+        sql += ' AND (content LIKE ? OR summary LIKE ? OR ocr_text LIKE ? OR note LIKE ?)';
+        params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
       }
+
+      if (type) {
+        sql += ' AND type = ?';
+        params.push(type);
+      }
+
+      sql += ' ORDER BY created_at DESC LIMIT ?';
+      params.push(limit);
+
+      const result = this.db.exec(sql, params);
       if (result.length === 0 || result[0].values.length === 0) return [];
-      return result[0].values.map(row => {
-        const rec = {};
-        result[0].columns.forEach((col, i) => {
-          rec[col] = row[i];
-        });
-        return rec;
-      });
+      return result[0].values.map(row => this._rowToRecord(result[0].columns, row));
     } catch (e) {
       console.error('searchRecords error:', e);
       return [];
@@ -1693,7 +1693,7 @@ class Database {
       this.db.exec(`SELECT COUNT(*) FROM records WHERE type = 'code'`)[0]?.values[0][0] || 0;
     const favorite =
       this.db.exec(`SELECT COUNT(*) FROM records WHERE favorite = 1`)[0]?.values[0][0] || 0;
-    return { total, text, image, file, code, favorite };
+    return { total, text, image, file, code, favorite, favorites: favorite };
   }
 
   // 获取详细统计
