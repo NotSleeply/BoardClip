@@ -17,23 +17,41 @@ class MacClipboardProvider extends BaseClipboardProvider {
     });
   }
 
+  paste() {
+    runCommand(
+      'osascript',
+      ['-e', 'tell application "System Events" to keystroke "v" using command down'],
+      { timeout: 5000 }
+    );
+  }
+
   readFiles() {
     try {
       const output = runCommand(
         'osascript',
         [
           '-e',
-          'try',
+          'use framework "Foundation"',
           '-e',
-          'set theFile to the clipboard as «class furl»',
+          'use framework "AppKit"',
           '-e',
-          'return POSIX path of theFile',
+          'use scripting additions',
           '-e',
-          'on error',
+          "set pb to current application's NSPasteboard's generalPasteboard()",
           '-e',
-          'return ""',
+          "set urls to pb's readObjectsForClasses:{current application's NSURL} options:(missing value)",
           '-e',
-          'end try'
+          'set output to {}',
+          '-e',
+          'repeat with u in urls',
+          '-e',
+          "if (u's isFileURL()) as boolean then set end of output to (u's |path|()) as text",
+          '-e',
+          'end repeat',
+          '-e',
+          "set AppleScript's text item delimiters to linefeed",
+          '-e',
+          'return output as text'
         ],
         { timeout: 5000 }
       );
@@ -56,10 +74,12 @@ class MacClipboardProvider extends BaseClipboardProvider {
       provider: 'macos-pbcopy-pbpaste',
       read: 'pbpaste',
       write: 'pbcopy',
-      files: 'osascript file URL',
+      paste: 'System Events Cmd+V',
+      files: 'AppKit NSPasteboard file URLs',
       candidates: {
         pbpaste: hasPbPaste,
-        pbcopy: hasPbCopy
+        pbcopy: hasPbCopy,
+        osascript: commandExists('osascript')
       }
     };
   }

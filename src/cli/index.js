@@ -112,6 +112,24 @@ function copyToClipboard(text) {
   clipboard.writeText(text || '');
 }
 
+function pasteClipboard() {
+  const { createClipboardProvider } = require('../core/clipboard/providers');
+  const clipboard = createClipboardProvider();
+  clipboard.paste();
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function findRecordForAction(db, id) {
+  const record = db.getRecord(id);
+  if (record) return record;
+
+  const partial = db.searchRecords({ search: id, limit: 1 });
+  return partial.length > 0 ? partial[0] : null;
+}
+
 function getWatcherStatus() {
   const pidFile = path.join(getDataDir(), 'watcher.pid');
   if (!fs.existsSync(pidFile)) {
@@ -125,6 +143,47 @@ function getWatcherStatus() {
   } catch {
     return { running: false, pid, stale: true, message: 'PID 文件存在，但进程不存在' };
   }
+}
+
+async function getDoctorChecks() {
+  const dataDir = getDataDir();
+  const logDir = path.join(dataDir, 'logs');
+  const checks = {
+    dataDir: { ok: false, path: dataDir },
+    database: { ok: false, path: path.join(dataDir, 'clawboard.db') },
+    logDir: { ok: false, path: logDir }
+  };
+
+  try {
+    fs.mkdirSync(dataDir, { recursive: true });
+    fs.accessSync(dataDir, fs.constants.R_OK | fs.constants.W_OK);
+    checks.dataDir.ok = true;
+  } catch (err) {
+    checks.dataDir.error = err.message;
+  }
+
+  try {
+    const db = await initDb();
+    try {
+      const stats = db.getStats();
+      checks.database.ok = true;
+      checks.database.records = stats.total || 0;
+    } finally {
+      closeDb(db);
+    }
+  } catch (err) {
+    checks.database.error = err.message;
+  }
+
+  try {
+    fs.mkdirSync(logDir, { recursive: true });
+    fs.accessSync(logDir, fs.constants.R_OK | fs.constants.W_OK);
+    checks.logDir.ok = true;
+  } catch (err) {
+    checks.logDir.error = err.message;
+  }
+
+  return checks;
 }
 
 const program = new Command();
@@ -180,19 +239,39 @@ program
   .action(async id => {
     const db = await initDb();
     try {
-      const record = db.getRecord(id);
+      const record = findRecordForAction(db, id);
       if (!record) {
-        const partial = db.searchRecords({ search: id, limit: 1 });
-        if (partial.length > 0) {
-          copyToClipboard(partial[0].content);
-          console.log(chalk.green(`✅ 已复制记录 ${partial[0].id} 到剪贴板`));
-          return;
-        }
         console.log(chalk.red(`❌ 未找到记录: ${id}`));
         process.exit(1);
       }
       copyToClipboard(record.content);
-      console.log(chalk.green(`✅ 已复制记录 ${id} 到剪贴板`));
+      console.log(chalk.green(`✅ 已复制记录 ${record.id} 到剪贴板`));
+    } finally {
+      closeDb(db);
+    }
+  });
+
+program
+  .command('paste <id>')
+  .description('复制指定记录到剪贴板并模拟粘贴')
+  .option('-d, --delay <ms>', '写入剪贴板后等待再粘贴的毫秒数', '150')
+  .action(async (id, opts) => {
+    const db = await initDb();
+    try {
+      const record = findRecordForAction(db, id);
+      if (!record) {
+        console.log(chalk.red(`❌ 未找到记录: ${id}`));
+        process.exit(1);
+      }
+
+      copyToClipboard(record.content);
+      const delay = Math.max(parseInt(opts.delay, 10) || 0, 0);
+      if (delay > 0) await sleep(delay);
+      pasteClipboard();
+      console.log(chalk.green(`✅ 已粘贴记录 ${record.id}`));
+    } catch (err) {
+      console.log(chalk.red(`❌ 粘贴失败: ${err.message}`));
+      process.exit(1);
     } finally {
       closeDb(db);
     }
@@ -616,7 +695,7 @@ program
 program
   .command('doctor')
   .description('检查 BoardClip 运行环境')
-  .action(() => {
+  .action(async () => {
     const { createClipboardProvider } = require('../core/clipboard/providers');
     const { getPlatformInfo } = require('../core/platform/platform');
 
@@ -635,9 +714,23 @@ program
       const clipboard = createClipboardProvider();
       const check = clipboard.check();
       console.log(JSON.stringify(check, null, 2));
+
+      if (!check.ok && check.installHint) {
+        console.log(chalk.yellow('\n安装提示:'));
+        console.log(check.installHint);
+      }
+
+      if (check.pasteHint) {
+        console.log(chalk.yellow('\n粘贴模拟提示:'));
+        console.log(check.pasteHint);
+      }
     } catch (err) {
       console.log(JSON.stringify({ ok: false, error: err.message }, null, 2));
     }
+
+    console.log('\n本地存储:');
+    const checks = await getDoctorChecks();
+    console.log(JSON.stringify(checks, null, 2));
 
     console.log('\nWatcher:');
     console.log(getWatcherStatus().message);

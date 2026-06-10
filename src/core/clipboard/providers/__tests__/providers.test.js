@@ -35,4 +35,22 @@ describe('Clipboard providers', () => {
 
     expect(provider.parseUriList(uriList)).toEqual([firstPath, secondPath]);
   });
+
+  test('LinuxClipboardProvider 应该从 xsel 文本输出解析文件路径', () => {
+    const provider = Object.create(LinuxClipboardProvider.prototype);
+    const firstPath = path.resolve('/tmp/a.txt');
+    const secondPath = path.resolve('/tmp/b.txt');
+
+    expect(provider.parseFileList(`${firstPath}\n${secondPath}\nnot-a-path`)).toEqual([
+      firstPath,
+      secondPath
+    ]);
+  });
+
+  test('LinuxClipboardProvider 应该提供 paste 依赖安装提示', () => {
+    const provider = Object.create(LinuxClipboardProvider.prototype);
+
+    expect(provider.getPasteInstallHint()).toContain('wtype');
+    expect(provider.getPasteInstallHint()).toContain('xdotool');
+  });
 });

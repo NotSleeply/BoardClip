@@ -9,6 +9,10 @@ class BaseClipboardProvider {
     throw new Error('writeText() not implemented');
   }
 
+  paste() {
+    throw new Error('paste() not implemented');
+  }
+
   readFiles() {
     return [];
   }

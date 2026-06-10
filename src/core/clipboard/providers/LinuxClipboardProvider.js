@@ -81,6 +81,27 @@ class LinuxClipboardProvider extends BaseClipboardProvider {
     throw new Error(getLinuxClipboardInstallHint());
   }
 
+  paste() {
+    const sessionType = (process.env.XDG_SESSION_TYPE || '').toLowerCase();
+
+    if (sessionType === 'wayland' && commandExists('wtype')) {
+      runCommand('wtype', ['-M', 'ctrl', '-P', 'v', '-p', 'v', '-m', 'ctrl'], { timeout: 5000 });
+      return;
+    }
+
+    if (commandExists('xdotool')) {
+      runCommand('xdotool', ['key', 'ctrl+v'], { timeout: 5000 });
+      return;
+    }
+
+    if (commandExists('wtype')) {
+      runCommand('wtype', ['-M', 'ctrl', '-P', 'v', '-p', 'v', '-m', 'ctrl'], { timeout: 5000 });
+      return;
+    }
+
+    throw new Error(this.getPasteInstallHint());
+  }
+
   readFiles() {
     try {
       let output = '';
@@ -92,14 +113,26 @@ class LinuxClipboardProvider extends BaseClipboardProvider {
         output = runCommand('xclip', ['-selection', 'clipboard', '-t', 'text/uri-list', '-o'], {
           timeout: 5000
         });
+      } else if (this.backend === 'xsel') {
+        output = runCommand('xsel', ['--clipboard', '--output'], { timeout: 5000 });
       } else {
         return [];
       }
 
-      return this.parseUriList(output);
+      return this.parseFileList(output);
     } catch {
       return [];
     }
+  }
+
+  parseFileList(value) {
+    const uriPaths = this.parseUriList(value);
+    if (uriPaths.length > 0) return uriPaths;
+
+    return value
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => line && (line.startsWith('/') || /^[a-zA-Z]:\\/.test(line)));
   }
 
   parseUriList(uriList) {
@@ -122,7 +155,9 @@ class LinuxClipboardProvider extends BaseClipboardProvider {
     const candidates = {
       wlClipboard: commandExists('wl-paste') && commandExists('wl-copy'),
       xclip: commandExists('xclip'),
-      xsel: commandExists('xsel')
+      xsel: commandExists('xsel'),
+      wtype: commandExists('wtype'),
+      xdotool: commandExists('xdotool')
     };
 
     return {
@@ -130,8 +165,19 @@ class LinuxClipboardProvider extends BaseClipboardProvider {
       provider: this.backend,
       session: process.env.XDG_SESSION_TYPE || 'unknown',
       candidates,
-      installHint: this.backend ? null : getLinuxClipboardInstallHint()
+      installHint: this.backend ? null : getLinuxClipboardInstallHint(),
+      pasteHint: candidates.wtype || candidates.xdotool ? null : this.getPasteInstallHint()
     };
+  }
+
+  getPasteInstallHint() {
+    return [
+      'Linux paste automation backend not found. Install one of:',
+      '  Wayland: sudo apt install wtype',
+      '  X11: sudo apt install xdotool',
+      '  Arch: sudo pacman -S wtype xdotool',
+      '  Fedora: sudo dnf install wtype xdotool'
+    ].join('\n');
   }
 }
 

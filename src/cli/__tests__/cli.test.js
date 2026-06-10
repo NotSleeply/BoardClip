@@ -27,6 +27,7 @@ describe('BoardClip CLI', () => {
     expect(result.stdout).toContain('search');
     expect(result.stdout).toContain('stats');
     expect(result.stdout).toContain('doctor');
+    expect(result.stdout).toContain('paste');
     expect(result.stdout).toContain('copy');
     expect(result.stdout).toContain('delete');
   });
@@ -110,6 +111,7 @@ describe('BoardClip CLI', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('BoardClip Doctor');
     expect(result.stdout).toContain('剪贴板后端');
+    expect(result.stdout).toContain('本地存储');
     expect(result.stdout).toContain('Watcher');
   });
 

@@ -25,6 +25,19 @@ class WindowsClipboardProvider extends BaseClipboardProvider {
     });
   }
 
+  paste() {
+    runCommand(
+      'powershell',
+      [
+        '-NoProfile',
+        '-STA',
+        '-Command',
+        'Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait("^v")'
+      ],
+      { timeout: 5000 }
+    );
+  }
+
   readFiles() {
     try {
       const output = runCommand(
@@ -52,6 +65,7 @@ class WindowsClipboardProvider extends BaseClipboardProvider {
       provider: 'windows-powershell',
       read: 'Get-Clipboard',
       write: 'Set-Clipboard',
+      paste: 'SendKeys Ctrl+V',
       files: 'Get-Clipboard -Format FileDropList'
     };
   }

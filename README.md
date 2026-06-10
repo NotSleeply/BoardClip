@@ -38,6 +38,12 @@ board-clip search "API 地址"
 # 复制某条记录到剪贴板
 board-clip copy <id>
 
+# 复制并模拟粘贴某条记录
+board-clip paste <id>
+
+# 检查运行环境和剪贴板后端
+board-clip doctor
+
 # 停止监控
 board-clip watch --stop
 ```
@@ -48,6 +54,8 @@ board-clip watch --stop
 | ---------------------------- | ----- | ------------------------ |
 | `board-clip list`            | `ls`  | 列出剪贴板历史记录       |
 | `board-clip copy <id>`       | `cp`  | 复制指定记录到系统剪贴板 |
+| `board-clip paste <id>`      |       | 复制并模拟粘贴指定记录   |
+| `board-clip show <id>`       |       | 查看指定记录详情         |
 | `board-clip search <query>`  | `s`   | 搜索剪贴板记录           |
 | `board-clip delete <id>`     | `rm`  | 删除指定记录             |
 | `board-clip favorite <id>`   | `fav` | 切换记录收藏状态         |
@@ -60,6 +68,7 @@ board-clip watch --stop
 | `board-clip import <file>`   | `imp` | 从备份文件导入数据       |
 | `board-clip backup`          |       | 备份管理                 |
 | `board-clip config`          |       | 查看或修改配置           |
+| `board-clip doctor`          |       | 检查运行环境             |
 | `board-clip watch`           |       | 启动剪贴板监控守护进程   |
 | `board-clip watch --stop`    |       | 停止监控守护进程         |
 
@@ -87,11 +96,29 @@ board-clip watch --stop
 
 ### 🌍 多平台
 
-| 平台        | 状态        | 备注                                     |
-| ----------- | ----------- | ---------------------------------------- |
-| **Windows** | ✅ 完全支持 | PowerShell 剪贴板交互                    |
-| **macOS**   | ✅ 完全支持 | pbcopy / pbpaste                         |
-| **Linux**   | ✅ 完全支持 | 需安装 `xclip`：`sudo apt install xclip` |
+| 平台        | 状态    | 备注                                                               |
+| ----------- | ------- | ------------------------------------------------------------------ |
+| **Windows** | ✅ 支持 | PowerShell `Get-Clipboard` / `Set-Clipboard` / `SendKeys`          |
+| **macOS**   | ✅ 支持 | `pbcopy` / `pbpaste` / AppKit 文件剪贴板 / AppleScript 粘贴        |
+| **Linux**   | ✅ 支持 | Wayland: `wl-clipboard` + `wtype`；X11: `xclip`/`xsel` + `xdotool` |
+
+### Linux 依赖
+
+```bash
+# Ubuntu / Debian, X11
+sudo apt install xclip xdotool
+
+# Ubuntu / Debian, Wayland
+sudo apt install wl-clipboard wtype
+
+# Arch
+sudo pacman -S xclip wl-clipboard xdotool wtype
+
+# Fedora
+sudo dnf install xclip wl-clipboard xdotool wtype
+```
+
+`board-clip doctor` 会检查剪贴板后端、数据库可读写、日志目录和 watcher 状态。
 
 <details>
 <summary><b>开发相关</b></summary>
@@ -99,8 +126,8 @@ board-clip watch --stop
 ### 开发
 
 ```bash
-git clone https://github.com/NotSleeply/ClawBoard.git
-cd ClawBoard
+git clone https://github.com/NotSleeply/BoardClip.git
+cd BoardClip
 pnpm install
 pnpm test
 node src/cli/index.js <command>
@@ -128,8 +155,8 @@ src/
 
 ## 📞 支持
 
-- 🐛 [Issue 反馈](https://github.com/NotSleeply/ClawBoard/issues)
-- 💬 [讨论区](https://github.com/NotSleeply/ClawBoard/discussions)
+- 🐛 [Issue 反馈](https://github.com/NotSleeply/BoardClip/issues)
+- 💬 [讨论区](https://github.com/NotSleeply/BoardClip/discussions)
 
 ---
 
