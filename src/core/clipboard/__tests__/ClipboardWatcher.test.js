@@ -77,6 +77,22 @@ describe('ClipboardWatcher', () => {
     });
   });
 
+  test('_processText 应该把多行文件路径保存为 file JSON 数组', () => {
+    const mockDb = { addRecord: vi.fn(), getRecords: vi.fn().mockReturnValue([]) };
+    const mockClipboard = { readText: vi.fn() };
+    const mockLog = { info: vi.fn(), error: vi.fn(), warn: vi.fn() };
+    watcher = new ClipboardWatcher(mockDb, mockClipboard, mockLog, null);
+
+    watcher._processText('C:\\Users\\test\\a.txt\nC:\\Users\\test\\b.txt');
+
+    expect(mockDb.addRecord).toHaveBeenCalledTimes(1);
+    const call = mockDb.addRecord.mock.calls[0][0];
+    expect(call.type).toBe('file');
+    expect(JSON.parse(call.content)).toEqual(['C:\\Users\\test\\a.txt', 'C:\\Users\\test\\b.txt']);
+    expect(call.summary).toBe('2 个文件');
+    expect(call.subtype).toBe('files');
+  });
+
   test('_check 重复文本不应该调用 _handleText', () => {
     const mockDb = { addRecord: vi.fn(), getRecords: vi.fn().mockReturnValue([]) };
     const mockClipboard = { readText: vi.fn().mockReturnValue('same text') };

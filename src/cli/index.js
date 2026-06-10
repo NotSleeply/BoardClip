@@ -58,12 +58,29 @@ function getRecordPreview(record, maxLen = 80) {
     return truncate(`[图片] ${record.file_path || record.content || ''}${size}`, maxLen);
   }
   if (record.type === 'file') {
-    return truncate(record.file_path || record.content || '', maxLen);
+    const files = getFilePaths(record);
+    if (files.length > 1) {
+      return truncate(`[${files.length} 个文件] ${files[0]}`, maxLen);
+    }
+    return truncate(record.file_path || files[0] || record.content || '', maxLen);
   }
   if (record.type === 'html') {
     return truncate(record.summary || record.content || '', maxLen);
   }
   return truncate(record.content, maxLen);
+}
+
+function getFilePaths(record) {
+  if (!record || !record.content || !record.content.trim().startsWith('[')) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(record.content);
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+  } catch {
+    return [];
+  }
 }
 
 function printRecordDetails(record) {
@@ -76,6 +93,8 @@ function printRecordDetails(record) {
   if (record.mime_type) console.log(`MIME: ${record.mime_type}`);
   if (record.subtype) console.log(`子类型: ${record.subtype}`);
   if (record.file_path) console.log(`文件路径: ${record.file_path}`);
+  const filePaths = getFilePaths(record);
+  if (filePaths.length > 1) console.log(`文件数量: ${filePaths.length}`);
   if (record.file_size) console.log(`文件大小: ${record.file_size}`);
   if (record.width || record.height)
     console.log(`尺寸: ${record.width || 0}x${record.height || 0}`);

@@ -20,9 +20,9 @@ class ClipboardItem {
     this.mimeType = mimeType;
     this.width = width || 0;
     this.height = height || 0;
-    this.hash = hash || ClipboardItem.createHash(this);
     this.subtype = subtype;
     this.fileSize = fileSize || 0;
+    this.hash = hash || ClipboardItem.createHash(this);
   }
 
   static createHash(item) {
@@ -42,6 +42,19 @@ class ClipboardItem {
 
   static fromText(text) {
     return new ClipboardItem({ type: 'text', content: text || '' });
+  }
+
+  static fromFiles(files) {
+    const normalizedFiles = Array.isArray(files) ? files.filter(Boolean) : [];
+    const content =
+      normalizedFiles.length === 1 ? normalizedFiles[0] : JSON.stringify(normalizedFiles);
+
+    return new ClipboardItem({
+      type: 'file',
+      content,
+      filePath: normalizedFiles.length === 1 ? normalizedFiles[0] : null,
+      subtype: normalizedFiles.length > 1 ? 'files' : 'file'
+    });
   }
 }
 

@@ -1,4 +1,5 @@
 const ClipboardItem = require('./ClipboardItem');
+const fs = require('fs');
 
 class ClipboardWatcher {
   constructor(db, clipboard, log, ai) {
@@ -145,18 +146,7 @@ class ClipboardWatcher {
     }
 
     if (item.type === 'file') {
-      this.db.addRecord({
-        type: 'file',
-        content: item.content,
-        summary: item.content,
-        source: 'clipboard',
-        mime_type: item.mimeType,
-        file_path: item.filePath,
-        file_size: item.fileSize || 0,
-        hash: item.hash,
-        subtype: item.subtype || null
-      });
-      this.log.info(`新记录: [file] ${item.content}`);
+      this._handleFileItem(item);
     }
   }
 
@@ -187,10 +177,14 @@ class ClipboardWatcher {
   }
 
   _processText(text, options = {}) {
+    const filePaths = this._parseFilePaths(text);
+    if (filePaths.length > 0) {
+      this._handleFileItem(ClipboardItem.fromFiles(filePaths));
+      return;
+    }
+
     let type = 'text';
-    if (this._isFilePath(text)) {
-      type = 'file';
-    } else if (this._isCode(text)) {
+    if (this._isCode(text)) {
       type = 'code';
     }
 
@@ -289,6 +283,78 @@ class ClipboardWatcher {
       homePath.test(trimmed) ||
       otherAbsolutePath.test(trimmed)
     );
+  }
+
+  _parseFilePaths(text) {
+    const trimmed = text.trim();
+    if (!trimmed) return [];
+
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (
+          Array.isArray(parsed) &&
+          parsed.length > 0 &&
+          parsed.every(item => typeof item === 'string' && this._isFilePath(item))
+        ) {
+          return parsed;
+        }
+      } catch {}
+    }
+
+    const lines = trimmed
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean);
+
+    if (lines.length > 0 && lines.every(line => this._isFilePath(line))) {
+      return lines;
+    }
+
+    return this._isFilePath(trimmed) ? [trimmed] : [];
+  }
+
+  _handleFileItem(item) {
+    const filePaths = this._getFilePathsFromItem(item);
+    const content = filePaths.length > 1 ? JSON.stringify(filePaths) : item.content;
+    const filePath = filePaths.length === 1 ? filePaths[0] : item.filePath || null;
+    const fileSize = item.fileSize || this._getTotalFileSize(filePaths);
+    const subtype = item.subtype || (filePaths.length > 1 ? 'files' : 'file');
+
+    this.db.addRecord({
+      type: 'file',
+      content,
+      summary: filePaths.length > 1 ? `${filePaths.length} 个文件` : content,
+      source: 'clipboard',
+      mime_type: item.mimeType || 'application/octet-stream',
+      file_path: filePath,
+      file_size: fileSize,
+      hash: item.hash || ClipboardItem.createHash({ type: 'file', content }),
+      subtype
+    });
+    this.log.info(`新记录: [file] ${content}`);
+  }
+
+  _getFilePathsFromItem(item) {
+    if (item.content && item.content.trim().startsWith('[')) {
+      try {
+        const parsed = JSON.parse(item.content);
+        if (Array.isArray(parsed)) return parsed.filter(Boolean);
+      } catch {}
+    }
+
+    return item.filePath ? [item.filePath] : item.content ? [item.content] : [];
+  }
+
+  _getTotalFileSize(filePaths) {
+    return filePaths.reduce((total, filePath) => {
+      try {
+        const stat = fs.statSync(filePath);
+        return total + (stat.isFile() ? stat.size : 0);
+      } catch {
+        return total;
+      }
+    }, 0);
   }
 
   _isCode(text) {
