@@ -490,6 +490,13 @@ class Database {
         ai_summary TEXT,
         embedding BLOB,
         language TEXT,
+        mime_type TEXT,
+        file_path TEXT,
+        file_size INTEGER DEFAULT 0,
+        width INTEGER DEFAULT 0,
+        height INTEGER DEFAULT 0,
+        hash TEXT,
+        subtype TEXT,
         locked INTEGER DEFAULT 0,
         encrypted INTEGER DEFAULT 0,
         synced INTEGER DEFAULT 0,
@@ -565,6 +572,23 @@ class Database {
       // 列已存在，忽略
     }
 
+    // 多类型剪贴板元数据
+    [
+      ['mime_type', 'TEXT'],
+      ['file_path', 'TEXT'],
+      ['file_size', 'INTEGER DEFAULT 0'],
+      ['width', 'INTEGER DEFAULT 0'],
+      ['height', 'INTEGER DEFAULT 0'],
+      ['hash', 'TEXT'],
+      ['subtype', 'TEXT']
+    ].forEach(([col, type]) => {
+      try {
+        this.db.run(`ALTER TABLE records ADD COLUMN ${col} ${type}`);
+      } catch (e) {
+        // 列已存在，忽略
+      }
+    });
+
     // 添加 AI 设置表（v0.54.0 AI 能力扩展）
     this.db.run(`
       CREATE TABLE IF NOT EXISTS ai_settings (
@@ -591,6 +615,7 @@ class Database {
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_favorite ON records(favorite)`);
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_created ON records(created_at DESC)`);
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_encrypted ON records(encrypted)`);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_hash ON records(hash)`);
     this.db.run(
       `CREATE INDEX IF NOT EXISTS idx_encryption_algorithm ON records(encryption_algorithm)`
     );
@@ -625,6 +650,13 @@ class Database {
         ai_summary TEXT,
         embedding BLOB,
         language TEXT,
+        mime_type TEXT,
+        file_path TEXT,
+        file_size INTEGER DEFAULT 0,
+        width INTEGER DEFAULT 0,
+        height INTEGER DEFAULT 0,
+        hash TEXT,
+        subtype TEXT,
         locked INTEGER DEFAULT 0,
         encrypted INTEGER DEFAULT 0,
         synced INTEGER DEFAULT 0,
@@ -635,6 +667,22 @@ class Database {
         deleted_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    [
+      ['mime_type', 'TEXT'],
+      ['file_path', 'TEXT'],
+      ['file_size', 'INTEGER DEFAULT 0'],
+      ['width', 'INTEGER DEFAULT 0'],
+      ['height', 'INTEGER DEFAULT 0'],
+      ['hash', 'TEXT'],
+      ['subtype', 'TEXT']
+    ].forEach(([col, type]) => {
+      try {
+        this.db.run(`ALTER TABLE trash ADD COLUMN ${col} ${type}`);
+      } catch (e) {
+        // 列已存在，忽略
+      }
+    });
 
     // v0.73.0: 规则引擎表
     this.db.run(`
@@ -837,7 +885,14 @@ class Database {
     ocr_text = null,
     merged_from = null,
     is_merged = false,
-    sensitive_types = ''
+    sensitive_types = '',
+    mime_type = null,
+    file_path = null,
+    file_size = 0,
+    width = 0,
+    height = 0,
+    hash = null,
+    subtype = null
   }) {
     let finalContent = content;
     let compressed = 0;
@@ -859,7 +914,7 @@ class Database {
     }
 
     this.db.run(
-      `INSERT INTO records (type, content, compressed, summary, source, source_app, source_title, source_url, tags, ai_summary, embedding, language, encrypted, ocr_text, merged_from, is_merged, sensitive_types) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO records (type, content, compressed, summary, source, source_app, source_title, source_url, tags, ai_summary, embedding, language, encrypted, ocr_text, merged_from, is_merged, sensitive_types, mime_type, file_path, file_size, width, height, hash, subtype) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         type,
         finalContent,
@@ -877,7 +932,14 @@ class Database {
         ocr_text,
         merged_from,
         is_merged ? 1 : 0,
-        sensitive_types
+        sensitive_types,
+        mime_type,
+        file_path,
+        file_size || 0,
+        width || 0,
+        height || 0,
+        hash,
+        subtype
       ]
     );
 
@@ -1457,8 +1519,9 @@ class Database {
     this.db.run(
       `
       INSERT INTO trash (original_id, type, content, summary, source, source_app, source_title, source_url,
-        favorite, tags, ai_summary, embedding, language, locked, encrypted, synced, ocr_text, merged_from, is_merged, sensitive_types)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        favorite, tags, ai_summary, embedding, language, mime_type, file_path, file_size, width, height, hash, subtype,
+        locked, encrypted, synced, ocr_text, merged_from, is_merged, sensitive_types)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       [
         id,
@@ -1474,6 +1537,13 @@ class Database {
         record.ai_summary,
         record.embedding,
         record.language,
+        record.mime_type,
+        record.file_path,
+        record.file_size || 0,
+        record.width || 0,
+        record.height || 0,
+        record.hash,
+        record.subtype,
         record.locked,
         record.encrypted,
         record.synced,
@@ -1523,8 +1593,9 @@ class Database {
     this.db.run(
       `
       INSERT INTO records (type, content, summary, source, source_app, source_title, source_url,
-        favorite, tags, ai_summary, embedding, language, locked, encrypted, synced, ocr_text, merged_from, is_merged, sensitive_types)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        favorite, tags, ai_summary, embedding, language, mime_type, file_path, file_size, width, height, hash, subtype,
+        locked, encrypted, synced, ocr_text, merged_from, is_merged, sensitive_types)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       [
         trashRecord.type,
@@ -1539,6 +1610,13 @@ class Database {
         trashRecord.ai_summary,
         trashRecord.embedding,
         trashRecord.language,
+        trashRecord.mime_type,
+        trashRecord.file_path,
+        trashRecord.file_size || 0,
+        trashRecord.width || 0,
+        trashRecord.height || 0,
+        trashRecord.hash,
+        trashRecord.subtype,
         trashRecord.locked,
         trashRecord.encrypted,
         trashRecord.synced,

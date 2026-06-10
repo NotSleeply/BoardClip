@@ -1,6 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const ClipboardItem = require('../core/clipboard/ClipboardItem');
 
 const logDir = path.join(os.homedir(), '.board-clip', 'logs');
 if (!fs.existsSync(logDir)) {
@@ -36,30 +37,37 @@ async function main() {
   const db = new Database(dataDir);
   await db._init();
 
-  const clipboard = {
-    readText: () => {
-      const { execSync } = require('child_process');
-      try {
-        if (process.platform === 'win32') {
-          return execSync(
-            'powershell -NoProfile -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Clipboard"',
-            {
-              encoding: 'utf8',
-              windowsHide: true,
-              timeout: 5000
-            }
-          ).replace(/\r?\n$/, '');
-        } else if (process.platform === 'darwin') {
-          return execSync('pbpaste', { encoding: 'utf8', timeout: 5000 }).replace(/\r?\n$/, '');
-        } else {
-          return execSync('xclip -selection clipboard -o', {
+  function readText() {
+    const { execSync } = require('child_process');
+    try {
+      if (process.platform === 'win32') {
+        return execSync(
+          'powershell -NoProfile -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Clipboard"',
+          {
             encoding: 'utf8',
+            windowsHide: true,
             timeout: 5000
-          }).replace(/\r?\n$/, '');
-        }
-      } catch {
-        return '';
+          }
+        ).replace(/\r?\n$/, '');
+      } else if (process.platform === 'darwin') {
+        return execSync('pbpaste', { encoding: 'utf8', timeout: 5000 }).replace(/\r?\n$/, '');
+      } else {
+        return execSync('xclip -selection clipboard -o', {
+          encoding: 'utf8',
+          timeout: 5000
+        }).replace(/\r?\n$/, '');
       }
+    } catch {
+      return '';
+    }
+  }
+
+  const clipboard = {
+    readText,
+    read: () => {
+      const text = readText();
+      if (!text) return null;
+      return ClipboardItem.fromText(text);
     },
     readImage: () => null
   };

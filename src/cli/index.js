@@ -49,7 +49,43 @@ function truncate(str, maxLen) {
   return singleLine.length > maxLen ? singleLine.slice(0, maxLen) + '...' : singleLine;
 }
 
-const typeIcons = { text: '📝', code: '💻', file: '📁', image: '🖼️' };
+const typeIcons = { text: '📝', code: '💻', file: '📁', image: '🖼️', html: '🌐' };
+
+function getRecordPreview(record, maxLen = 80) {
+  if (!record) return '';
+  if (record.type === 'image') {
+    const size = record.width && record.height ? ` ${record.width}x${record.height}` : '';
+    return truncate(`[图片] ${record.file_path || record.content || ''}${size}`, maxLen);
+  }
+  if (record.type === 'file') {
+    return truncate(record.file_path || record.content || '', maxLen);
+  }
+  if (record.type === 'html') {
+    return truncate(record.summary || record.content || '', maxLen);
+  }
+  return truncate(record.content, maxLen);
+}
+
+function printRecordDetails(record) {
+  console.log(chalk.bold(`ID: ${record.id}`));
+  console.log(`类型: ${record.type}`);
+  console.log(`时间: ${record.createdAt || record.created_at || ''}`);
+  console.log(`收藏: ${record.favorite ? '是' : '否'}`);
+
+  if (record.language) console.log(`语言: ${record.language}`);
+  if (record.mime_type) console.log(`MIME: ${record.mime_type}`);
+  if (record.subtype) console.log(`子类型: ${record.subtype}`);
+  if (record.file_path) console.log(`文件路径: ${record.file_path}`);
+  if (record.file_size) console.log(`文件大小: ${record.file_size}`);
+  if (record.width || record.height)
+    console.log(`尺寸: ${record.width || 0}x${record.height || 0}`);
+  if (record.hash) console.log(`Hash: ${record.hash}`);
+  if (record.tags && record.tags !== '[]') console.log(`标签: ${record.tags}`);
+  if (record.note) console.log(`备注: ${record.note}`);
+
+  console.log('');
+  console.log(record.content || '');
+}
 
 function copyToClipboard(text) {
   const { spawnSync } = require('child_process');
@@ -117,7 +153,7 @@ program
         const fav = r.favorite ? chalk.yellow('⭐') : '  ';
         const enc = r.encrypted ? chalk.red('🔒') : '  ';
         const time = chalk.gray(formatTime(r.createdAt || r.created_at));
-        const content = truncate(r.content, 80);
+        const content = getRecordPreview(r, 80);
         const id = chalk.cyan(String(r.id).slice(0, 8));
         console.log(`  ${fav}${enc} ${icon} ${id}  ${content}  ${time}`);
       }
@@ -153,6 +189,23 @@ program
   });
 
 program
+  .command('show <id>')
+  .description('查看指定剪贴板记录详情')
+  .action(async id => {
+    const db = await initDb();
+    try {
+      const record = db.getRecord(id);
+      if (!record) {
+        console.log(chalk.red(`❌ 未找到记录: ${id}`));
+        process.exit(1);
+      }
+      printRecordDetails(record);
+    } finally {
+      closeDb(db);
+    }
+  });
+
+program
   .command('search <query>')
   .alias('s')
   .description('搜索剪贴板记录')
@@ -180,7 +233,7 @@ program
       for (const r of records) {
         const icon = typeIcons[r.type] || '📋';
         const time = chalk.gray(formatTime(r.createdAt || r.created_at));
-        const content = truncate(r.content, 80);
+        const content = getRecordPreview(r, 80);
         const id = chalk.cyan(String(r.id).slice(0, 8));
         console.log(`  ${icon} ${id}  ${content}  ${time}`);
       }
@@ -608,7 +661,7 @@ program
     const child = spawn(process.execPath, [watcherScript], {
       detached: true,
       stdio: 'ignore',
-      env: { ...process.env, CLAWBOARD_DATA: getDataDir() }
+      env: { ...process.env, BOARD_CLIP_DATA: getDataDir() }
     });
     child.unref();
 

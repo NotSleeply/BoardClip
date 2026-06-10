@@ -1,11 +1,14 @@
+const ClipboardItem = require('./ClipboardItem');
+
 class ClipboardWatcher {
   constructor(db, clipboard, log, ai) {
     this.db = db;
-    this.clipboard = clipboard;
-    this.log = log;
+    this.clipboard = clipboard || { readText: () => '' };
+    this.log = log || { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
     this.ai = ai;
     this.interval = null;
     this.lastText = '';
+    this.lastHash = null;
     this.pollInterval = 1000;
     this.currentSource = { app: null, title: null, url: null };
   }
@@ -17,10 +20,10 @@ class ClipboardWatcher {
   start() {
     if (this.interval) return;
 
-    this.lastText = this.clipboard.readText() || '';
+    this._setInitialClipboardState();
 
     this.interval = setInterval(() => {
-      this._check();
+      void this._check();
     }, this.pollInterval);
 
     this.log.info('剪贴板监控已启动');
@@ -36,13 +39,124 @@ class ClipboardWatcher {
 
   _check() {
     try {
-      const currentText = this.clipboard.readText() || '';
-      if (currentText && currentText !== this.lastText) {
-        this.lastText = currentText;
-        this._handleText(currentText);
+      const itemOrPromise = this._readClipboardItem();
+      if (itemOrPromise && typeof itemOrPromise.then === 'function') {
+        return itemOrPromise
+          .then(item => this._handleNewItem(item))
+          .catch(err => this.log.error('剪贴板检查出错:', err.message));
       }
+
+      return this._handleNewItem(itemOrPromise);
     } catch (err) {
       this.log.error('剪贴板检查出错:', err.message);
+    }
+  }
+
+  _setInitialClipboardState() {
+    try {
+      const itemOrPromise = this._readClipboardItem();
+      const setState = item => {
+        if (!item) return;
+        this.lastText = item.content || '';
+        this.lastHash = item.hash || null;
+      };
+
+      if (itemOrPromise && typeof itemOrPromise.then === 'function') {
+        itemOrPromise.then(setState).catch(() => {});
+      } else {
+        setState(itemOrPromise);
+      }
+    } catch {}
+  }
+
+  _readClipboardItem() {
+    if (this.clipboard && typeof this.clipboard.read === 'function') {
+      const item = this.clipboard.read();
+      if (item && typeof item.then === 'function') {
+        return item.then(value => this._normalizeClipboardItem(value));
+      }
+      return this._normalizeClipboardItem(item);
+    }
+
+    const text = this.clipboard.readText ? this.clipboard.readText() : '';
+    return this._normalizeClipboardItem(text ? ClipboardItem.fromText(text) : null);
+  }
+
+  _normalizeClipboardItem(item) {
+    if (!item) return null;
+    if (item instanceof ClipboardItem) return item;
+    if (typeof item === 'string') return ClipboardItem.fromText(item);
+    return new ClipboardItem(item);
+  }
+
+  _handleNewItem(item) {
+    if (!item || !item.content) return;
+
+    if (item.hash && item.hash === this.lastHash) {
+      return;
+    }
+
+    if ((item.type === 'text' || item.type === 'code') && item.content === this.lastText) {
+      return;
+    }
+
+    this.lastHash = item.hash || null;
+    this.lastText = item.type === 'text' || item.type === 'code' ? item.content : '';
+    return this._handleItem(item);
+  }
+
+  _handleItem(item) {
+    if (item.type === 'text' || item.type === 'code') {
+      this._handleText(item.content);
+      return;
+    }
+
+    if (item.type === 'html') {
+      this.db.addRecord({
+        type: 'html',
+        content: item.content,
+        summary: this._generateSummary(item.content),
+        source: 'clipboard',
+        mime_type: item.mimeType || 'text/html',
+        hash: item.hash,
+        subtype: item.subtype || null
+      });
+      this.log.info(`新记录: [html] ${item.content.substring(0, 50)}...`);
+      return;
+    }
+
+    if (item.type === 'image') {
+      const imagePath = item.filePath || item.content;
+      this.db.addRecord({
+        type: 'image',
+        content: imagePath,
+        summary: '[图片]',
+        source: 'clipboard',
+        mime_type: item.mimeType || 'image/png',
+        file_path: imagePath,
+        file_size: item.fileSize || 0,
+        width: item.width || 0,
+        height: item.height || 0,
+        hash: item.hash,
+        subtype: item.subtype || null
+      });
+      this.log.info(`新记录: [image] ${imagePath}`);
+      return;
+    }
+
+    if (item.type === 'file') {
+      this.db.addRecord({
+        type: 'file',
+        content: item.content,
+        summary: item.content,
+        source: 'clipboard',
+        mime_type: item.mimeType,
+        file_path: item.filePath,
+        file_size: item.fileSize || 0,
+        hash: item.hash,
+        subtype: item.subtype || null
+      });
+      this.log.info(`新记录: [file] ${item.content}`);
     }
   }
 
@@ -102,6 +216,7 @@ class ClipboardWatcher {
           embedding: aiResult && aiResult.embedding,
           language,
           source: 'clipboard',
+          hash: ClipboardItem.createHash({ type, content: text }),
           ...(isEncrypted ? { encrypted: true, sensitive_types: sensitiveTypesStr } : {})
         });
 
@@ -121,6 +236,7 @@ class ClipboardWatcher {
           content: text,
           summary: this._generateSummary(text),
           source: 'clipboard',
+          hash: ClipboardItem.createHash({ type, content: text }),
           ...(isEncrypted ? { encrypted: true, sensitive_types: sensitiveTypesStr } : {})
         });
 

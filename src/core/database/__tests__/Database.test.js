@@ -116,6 +116,33 @@ describe('Database', () => {
     expect(records[0].type).toBe('code');
   });
 
+  test('Database 应该保存多类型剪贴板元数据', async () => {
+    db = new Database(createTmpDir('metadata'));
+    await db._initPromise;
+
+    const record = addTestRecord(db, {
+      type: 'image',
+      content: '/tmp/board-clip/image.png',
+      summary: '[图片]',
+      mime_type: 'image/png',
+      file_path: '/tmp/board-clip/image.png',
+      file_size: 1024,
+      width: 640,
+      height: 480,
+      hash: 'image-hash',
+      subtype: 'screenshot'
+    });
+
+    const saved = db.getRecord(record.id);
+    expect(saved.mime_type).toBe('image/png');
+    expect(saved.file_path).toBe('/tmp/board-clip/image.png');
+    expect(saved.file_size).toBe(1024);
+    expect(saved.width).toBe(640);
+    expect(saved.height).toBe(480);
+    expect(saved.hash).toBe('image-hash');
+    expect(saved.subtype).toBe('screenshot');
+  });
+
   test('Database 搜索记录', async () => {
     db = new Database(createTmpDir('search'));
     await db._initPromise;

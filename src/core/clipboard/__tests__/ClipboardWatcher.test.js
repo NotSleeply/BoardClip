@@ -58,6 +58,25 @@ describe('ClipboardWatcher', () => {
     expect(handleSpy).toHaveBeenCalledWith('new text');
   });
 
+  test('_check 支持 read 返回统一剪贴板对象并按 hash 去重', () => {
+    const mockDb = { addRecord: vi.fn(), getRecords: vi.fn().mockReturnValue([]) };
+    const mockClipboard = {
+      read: vi.fn().mockReturnValue({ type: 'html', content: '<b>Hello</b>', hash: 'same-hash' })
+    };
+    const mockLog = { info: vi.fn(), error: vi.fn(), warn: vi.fn() };
+    watcher = new ClipboardWatcher(mockDb, mockClipboard, mockLog);
+
+    watcher._check();
+    watcher._check();
+
+    expect(mockDb.addRecord).toHaveBeenCalledTimes(1);
+    expect(mockDb.addRecord.mock.calls[0][0]).toMatchObject({
+      type: 'html',
+      content: '<b>Hello</b>',
+      hash: 'same-hash'
+    });
+  });
+
   test('_check 重复文本不应该调用 _handleText', () => {
     const mockDb = { addRecord: vi.fn(), getRecords: vi.fn().mockReturnValue([]) };
     const mockClipboard = { readText: vi.fn().mockReturnValue('same text') };
