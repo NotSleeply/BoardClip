@@ -354,11 +354,7 @@ program
       const limit = parseInt(opts.limit, 10) || 5;
 
       // 语义搜索相关记录
-      const records = await db.semanticSearch(
-        question,
-        text => ai.getEmbedding(text),
-        limit
-      );
+      const records = await db.semanticSearch(question, text => ai.getEmbedding(text), limit);
 
       if (!records || records.length === 0) {
         console.log(chalk.gray('未找到相关的剪贴板记录'));

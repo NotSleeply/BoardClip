@@ -170,7 +170,10 @@ async function ask(question, contextRecords) {
 
   try {
     const context = contextRecords
-      .map(r => `[记录 ${r.id}] (${r.type}) ${r.created_at || ''}\n${(r.content || '').substring(0, 800)}`)
+      .map(
+        r =>
+          `[记录 ${r.id}] (${r.type}) ${r.created_at || ''}\n${(r.content || '').substring(0, 800)}`
+      )
       .join('\n\n---\n\n');
 
     const prompt = renderPrompt('qa', { context, question });
