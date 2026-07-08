@@ -3182,7 +3182,9 @@ class Database {
       const recLower = recordContent.toLowerCase();
 
       // 策略 1：编辑距离相似度（仅对长度相近的内容使用，适合找近似重复）
-      const lenRatio = Math.min(content.length, recordContent.length) / Math.max(content.length, recordContent.length);
+      const lenRatio =
+        Math.min(content.length, recordContent.length) /
+        Math.max(content.length, recordContent.length);
       const levSim = lenRatio > 0.4 ? this._similarity(content, recordContent) : 0;
       if (levSim >= threshold && levSim < 0.9999) {
         similar.push({
