@@ -300,6 +300,7 @@ program
   .description('搜索剪贴板记录')
   .option('-n, --limit <number>', '结果条数', '10')
   .option('-t, --type <type>', '按类型过滤')
+  .option('-z, --fuzzy', '启用模糊匹配 (编辑距离 + Token 重叠)')
   .option('--semantic', '启用语义搜索 (需要 AI 服务)')
   .action(async (query, opts) => {
     const db = await initDb();
@@ -307,6 +308,8 @@ program
       let records;
       if (opts.semantic) {
         records = await db.search(query, parseInt(opts.limit, 10), true);
+      } else if (opts.fuzzy) {
+        records = db.findSimilar(query, 0.15, parseInt(opts.limit, 10));
       } else {
         records = db.searchRecords({
           search: query,
