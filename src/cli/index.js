@@ -219,12 +219,12 @@ program
       console.log(chalk.bold(`\n🦞 CBoard 剪贴板历史 (共 ${records.length} 条)\n`));
       for (const r of records) {
         const icon = typeIcons[r.type] || '📋';
-        const fav = r.favorite ? chalk.yellow('⭐') : '  ';
-        const enc = r.encrypted ? chalk.red('🔒') : '  ';
+        const fav = r.favorite ? '⭐ ' : '';
+        const enc = r.encrypted ? '🔒 ' : '';
         const time = chalk.gray(formatTime(r.createdAt || r.created_at));
         const content = getRecordPreview(r, 80);
         const id = chalk.cyan(String(r.id).slice(0, 8));
-        console.log(`  ${fav}${enc} ${icon} ${id}  ${content}  ${time}`);
+        console.log(` ${fav}${enc}${icon} ${id}  ${content}  ${time}`);
       }
       console.log();
     } finally {
