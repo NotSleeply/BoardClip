@@ -333,6 +333,66 @@ program
   });
 
 program
+  .command('ask <question>')
+  .description('对剪贴板历史进行自然语言问答 (需要 Ollama)')
+  .option('-n, --limit <number>', '参考记录条数', '5')
+  .option('--no-context', '不显示来源引用')
+  .action(async (question, opts) => {
+    const db = await initDb();
+    try {
+      const ai = require('../core/ai/AIService');
+      const healthy = await ai.checkHealth();
+      if (!healthy) {
+        console.log(chalk.red('❌ Ollama 未运行，请先启动 Ollama'));
+        console.log(chalk.gray('  安装: https://ollama.com'));
+        console.log(chalk.gray('  模型: ollama pull qwen2.5:3b && ollama pull nomic-embed-text'));
+        process.exit(1);
+      }
+
+      console.log(chalk.cyan('🔍 正在分析问题...'));
+
+      const limit = parseInt(opts.limit, 10) || 5;
+
+      // 语义搜索相关记录
+      const records = await db.semanticSearch(
+        question,
+        text => ai.getEmbedding(text),
+        limit
+      );
+
+      if (!records || records.length === 0) {
+        console.log(chalk.gray('未找到相关的剪贴板记录'));
+        return;
+      }
+
+      console.log(chalk.gray(`参考 ${records.length} 条相关记录，生成回答中...\n`));
+
+      const result = await ai.ask(question, records);
+
+      // 显示回答
+      console.log(chalk.bold('🤖 回答:\n'));
+      console.log(result.answer);
+
+      // 显示来源引用
+      if (opts.context && result.sources && result.sources.length > 0) {
+        console.log(chalk.bold('\n📎 参考来源:\n'));
+        for (const s of result.sources) {
+          const icon = typeIcons[s.type] || '📋';
+          const id = chalk.cyan(String(s.id).slice(0, 8));
+          const line = s.summary ? ` (${s.summary})` : '';
+          console.log(`  ${icon} ${id}${line}`);
+        }
+      }
+      console.log();
+    } catch (err) {
+      console.log(chalk.red(`❌ 问答失败: ${err.message}`));
+      process.exit(1);
+    } finally {
+      closeDb(db);
+    }
+  });
+
+program
   .command('delete <id>')
   .alias('rm')
   .description('删除指定记录')
