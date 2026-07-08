@@ -1,5 +1,8 @@
 const BaseClipboardProvider = require('./BaseClipboardProvider');
 const { runCommand } = require('../../platform/command');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 
 class WindowsClipboardProvider extends BaseClipboardProvider {
   readText() {
@@ -19,10 +22,17 @@ class WindowsClipboardProvider extends BaseClipboardProvider {
   }
 
   writeText(text) {
-    runCommand('powershell', ['-NoProfile', '-Command', '$Input | Set-Clipboard'], {
-      input: Buffer.from(text || '', 'utf8'),
-      timeout: 5000
-    });
+    const tmpFile = path.join(os.tmpdir(), `bc-${Date.now()}.txt`);
+    fs.writeFileSync(tmpFile, text || '', 'utf8');
+    try {
+      runCommand('powershell', [
+        '-NoProfile',
+        '-Command',
+        `Get-Content '${tmpFile}' -Encoding UTF8 -Raw | Set-Clipboard`
+      ], { timeout: 5000 });
+    } finally {
+      try { fs.unlinkSync(tmpFile); } catch { }
+    }
   }
 
   paste() {
