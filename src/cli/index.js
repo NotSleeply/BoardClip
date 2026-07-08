@@ -45,7 +45,7 @@ function formatTime(ts) {
 
 function truncate(str, maxLen) {
   if (!str) return '';
-  const singleLine = str.replace(/\n/g, '\\n');
+  const singleLine = str.split('\n')[0].trim();
   return singleLine.length > maxLen ? singleLine.slice(0, maxLen) + '...' : singleLine;
 }
 
@@ -219,12 +219,12 @@ program
       console.log(chalk.bold(`\n🦞 CBoard 剪贴板历史 (共 ${records.length} 条)\n`));
       for (const r of records) {
         const icon = typeIcons[r.type] || '📋';
-        const fav = r.favorite ? chalk.yellow('⭐') : '  ';
-        const enc = r.encrypted ? chalk.red('🔒') : '  ';
+        const fav = r.favorite ? '⭐ ' : '';
+        const enc = r.encrypted ? '🔒 ' : '';
         const time = chalk.gray(formatTime(r.createdAt || r.created_at));
         const content = getRecordPreview(r, 80);
         const id = chalk.cyan(String(r.id).slice(0, 8));
-        console.log(`  ${fav}${enc} ${icon} ${id}  ${content}  ${time}`);
+        console.log(` ${fav}${enc}${icon} ${id}  ${content}  ${time}`);
       }
       console.log();
     } finally {
@@ -300,6 +300,7 @@ program
   .description('搜索剪贴板记录')
   .option('-n, --limit <number>', '结果条数', '10')
   .option('-t, --type <type>', '按类型过滤')
+  .option('-z, --fuzzy', '启用模糊匹配 (编辑距离 + Token 重叠)')
   .option('--semantic', '启用语义搜索 (需要 AI 服务)')
   .action(async (query, opts) => {
     const db = await initDb();
@@ -307,6 +308,8 @@ program
       let records;
       if (opts.semantic) {
         records = await db.search(query, parseInt(opts.limit, 10), true);
+      } else if (opts.fuzzy) {
+        records = db.findSimilar(query, 0.15, parseInt(opts.limit, 10));
       } else {
         records = db.searchRecords({
           search: query,
@@ -327,6 +330,62 @@ program
         console.log(`  ${icon} ${id}  ${content}  ${time}`);
       }
       console.log();
+    } finally {
+      closeDb(db);
+    }
+  });
+
+program
+  .command('ask <question>')
+  .description('对剪贴板历史进行自然语言问答 (需要 Ollama)')
+  .option('-n, --limit <number>', '参考记录条数', '5')
+  .option('--no-context', '不显示来源引用')
+  .action(async (question, opts) => {
+    const db = await initDb();
+    try {
+      const ai = require('../core/ai/AIService');
+      const healthy = await ai.checkHealth();
+      if (!healthy) {
+        console.log(chalk.red('❌ Ollama 未运行，请先启动 Ollama'));
+        console.log(chalk.gray('  安装: https://ollama.com'));
+        console.log(chalk.gray('  模型: ollama pull qwen2.5:3b && ollama pull nomic-embed-text'));
+        process.exit(1);
+      }
+
+      console.log(chalk.cyan('🔍 正在分析问题...'));
+
+      const limit = parseInt(opts.limit, 10) || 5;
+
+      // 语义搜索相关记录
+      const records = await db.semanticSearch(question, text => ai.getEmbedding(text), limit);
+
+      if (!records || records.length === 0) {
+        console.log(chalk.gray('未找到相关的剪贴板记录'));
+        return;
+      }
+
+      console.log(chalk.gray(`参考 ${records.length} 条相关记录，生成回答中...\n`));
+
+      const result = await ai.ask(question, records);
+
+      // 显示回答
+      console.log(chalk.bold('🤖 回答:\n'));
+      console.log(result.answer);
+
+      // 显示来源引用
+      if (opts.context && result.sources && result.sources.length > 0) {
+        console.log(chalk.bold('\n📎 参考来源:\n'));
+        for (const s of result.sources) {
+          const icon = typeIcons[s.type] || '📋';
+          const id = chalk.cyan(String(s.id).slice(0, 8));
+          const line = s.summary ? ` (${s.summary})` : '';
+          console.log(`  ${icon} ${id}${line}`);
+        }
+      }
+      console.log();
+    } catch (err) {
+      console.log(chalk.red(`❌ 问答失败: ${err.message}`));
+      process.exit(1);
     } finally {
       closeDb(db);
     }

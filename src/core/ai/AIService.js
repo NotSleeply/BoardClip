@@ -33,7 +33,8 @@ const prompts = {
   summary: '请为以下内容生成一个简短的中文摘要（不超过50字）：\n\n{{content}}',
   tag: '请为以下内容生成3-5个中文标签（用逗号分隔）：\n\n{{content}}\n\n类型：{{type}}\n来源：{{source}}',
   search:
-    '将以下搜索query转换为一个更适合搜索的关键词短句（保留核心语义，去除口语化表达）：\n\n搜索: {{query}}\n\n只输出转换后的关键词，不要其他解释。'
+    '将以下搜索query转换为一个更适合搜索的关键词短句（保留核心语义，去除口语化表达）：\n\n搜索: {{query}}\n\n只输出转换后的关键词，不要其他解释。',
+  qa: '你是一个基于用户剪贴板历史的智能问答助手。以下是用户剪贴板中与问题相关的内容：\n\n{{context}}\n\n请基于以上剪贴板历史记录回答用户的问题：{{question}}\n\n要求：\n- 如果信息足够，给出准确具体的回答，并引用相关记录 ID\n- 如果信息不足以回答，请如实说明\n- 答案用中文\n- 保持简洁'
 };
 
 // 保存默认值用于一键重置
@@ -155,6 +156,43 @@ async function searchEnhance(query) {
 }
 
 /**
+ * 基于剪贴板历史进行自然语言问答（RAG）
+ * @param {string} question - 用户问题
+ * @param {Array<{id: number, type: string, content: string, summary: string, created_at: string}>} contextRecords - 相关上下文记录
+ * @returns {Promise<{answer: string, sources: Array<{id: number, type: string}>}>}
+ */
+async function ask(question, contextRecords) {
+  if (!config.enabled) return { answer: 'AI 服务未启用，请启用后重试', sources: [] };
+  if (!question) return { answer: '请输入问题', sources: [] };
+  if (!contextRecords || contextRecords.length === 0) {
+    return { answer: '剪贴板历史中没有找到相关信息', sources: [] };
+  }
+
+  try {
+    const context = contextRecords
+      .map(
+        r =>
+          `[记录 ${r.id}] (${r.type}) ${r.created_at || ''}\n${(r.content || '').substring(0, 800)}`
+      )
+      .join('\n\n---\n\n');
+
+    const prompt = renderPrompt('qa', { context, question });
+    const answer = await _chat(prompt);
+
+    const sources = contextRecords.map(r => ({
+      id: r.id,
+      type: r.type,
+      summary: r.ai_summary || r.summary || null
+    }));
+
+    return { answer: answer || '无法生成回答', sources };
+  } catch (err) {
+    log.warn('AI 问答失败:', err.message);
+    return { answer: `AI 问答失败: ${err.message}`, sources: [] };
+  }
+}
+
+/**
  * 生成嵌入向量（用于语义搜索）
  */
 async function getEmbedding(text) {
@@ -256,6 +294,7 @@ module.exports = {
   summarize,
   generateTags,
   searchEnhance,
+  ask,
   getEmbedding,
   checkHealth,
   listModels,

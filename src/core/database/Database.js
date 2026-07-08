@@ -3161,27 +3161,31 @@ class Database {
 
   // 改进版 findSimilar：多策略（编辑距离 + token 级别相似度）
   findSimilar(content, threshold = 0.8, limit = 5) {
-    if (!content || content.length < 10) return [];
+    if (!content || content.length < 5) return [];
 
     const result = this.db.exec(`
       SELECT id, content, created_at, favorite, type
       FROM records
-      WHERE encrypted = 0 AND type = 'text'
+      WHERE encrypted = 0 AND (type = 'text' OR type = 'code')
       ORDER BY created_at DESC
       LIMIT 200
     `);
 
     if (result.length === 0 || result[0].values.length === 0) return [];
 
-    const textLower = content.toLowerCase();
-    const contentTokens = new Set(textLower.split(/\s+/).filter(t => t.length > 2));
+    const queryLower = content.toLowerCase();
+    const queryWords = queryLower.split(/\s+/).filter(t => t.length > 1);
 
     const similar = [];
     for (const row of result[0].values) {
       const [id, recordContent, createdAt, favorite, type] = row;
+      const recLower = recordContent.toLowerCase();
 
-      // 策略 1：编辑距离相似度（排除完全相同）
-      const levSim = this._similarity(content, recordContent);
+      // 策略 1：编辑距离相似度（仅对长度相近的内容使用，适合找近似重复）
+      const lenRatio =
+        Math.min(content.length, recordContent.length) /
+        Math.max(content.length, recordContent.length);
+      const levSim = lenRatio > 0.4 ? this._similarity(content, recordContent) : 0;
       if (levSim >= threshold && levSim < 0.9999) {
         similar.push({
           id,
@@ -3195,21 +3199,16 @@ class Database {
         continue;
       }
 
-      // 策略 2：Token 级重叠（适合长文本有轻微差异的情况）
-      const recTokens = new Set(
-        recordContent
-          .toLowerCase()
-          .split(/\s+/)
-          .filter(t => t.length > 2)
-      );
+      // 策略 2：Token 级重叠
+      const recTokens = new Set(recLower.split(/\s+/).filter(t => t.length > 2));
       let overlap = 0;
-      for (const tok of contentTokens) {
+      for (const tok of queryWords) {
         if (recTokens.has(tok)) overlap++;
       }
-      const union = contentTokens.size + recTokens.size - overlap;
+      const union = queryWords.length + recTokens.size - overlap;
       const tokenSim = union > 0 ? overlap / union : 0;
 
-      if (tokenSim >= threshold && tokenSim < 0.9999) {
+      if (tokenSim >= threshold) {
         similar.push({
           id,
           content: recordContent.substring(0, 200),
@@ -3219,6 +3218,27 @@ class Database {
           favorite: favorite === 1,
           type
         });
+        continue;
+      }
+
+      // 策略 3：关键词子串匹配（适合代码搜索，短查询匹配长内容）
+      if (queryWords.length > 0) {
+        let hitCount = 0;
+        for (const word of queryWords) {
+          if (recLower.includes(word)) hitCount++;
+        }
+        const wordHitRatio = hitCount / queryWords.length;
+        if (wordHitRatio > 0) {
+          similar.push({
+            id,
+            content: recordContent.substring(0, 200),
+            similarity: Math.round(wordHitRatio * 50),
+            strategy: 'keyword',
+            created_at: createdAt,
+            favorite: favorite === 1,
+            type
+          });
+        }
       }
     }
 

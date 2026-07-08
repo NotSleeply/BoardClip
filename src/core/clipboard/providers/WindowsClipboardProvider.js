@@ -19,10 +19,17 @@ class WindowsClipboardProvider extends BaseClipboardProvider {
   }
 
   writeText(text) {
-    runCommand('powershell', ['-NoProfile', '-Command', '$Input | Set-Clipboard'], {
-      input: Buffer.from(text || '', 'utf8'),
-      timeout: 5000
-    });
+    const b64 = Buffer.from(text || '', 'utf8').toString('base64');
+    runCommand(
+      'powershell',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        `Set-Clipboard -Value ([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${b64}')))`
+      ],
+      { timeout: 5000 }
+    );
   }
 
   paste() {
