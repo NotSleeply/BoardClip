@@ -45,7 +45,7 @@ function formatTime(ts) {
 
 function truncate(str, maxLen) {
   if (!str) return '';
-  const singleLine = str.replace(/\n/g, '\\n');
+  const singleLine = str.split('\n')[0].trim();
   return singleLine.length > maxLen ? singleLine.slice(0, maxLen) + '...' : singleLine;
 }
 
